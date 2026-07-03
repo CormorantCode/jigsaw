@@ -5,41 +5,47 @@ GitHub Pages site first, ported to Devvit later.
 
 ## Build order (per the original plan)
 
-- [x] **Milestone 1 — tab curve + grid** (`index.html`, this commit): plain SVG
-      outlines, no image. Confirms the bezier "tab" shape looks right and that
-      neighboring pieces truly mate along every shared edge.
-- [ ] **Milestone 2 — image clip mask**: apply a real photo as a clip path over
-      the piece outlines, confirm the picture reads correctly across piece
-      boundaries at various piece counts.
+- [x] **Milestone 1 — tab curve + grid**: plain SVG outlines, no image. Confirmed
+      the bezier "tab" shape looks right and that neighboring pieces truly mate
+      along every shared edge. Final tuned values: tab height 26%, neck width
+      16%, tab diameter 40%, edge bow 10%.
+- [x] **Milestone 2 — image clip mask** (`index.html`, this commit): a real
+      photo is now clipped to the piece outlines. Confirmed pixel-accurate
+      against the source image (block-averaged diff of ~1/255, zero systematic
+      offset found via shift-search) — the picture reads correctly across
+      every cut, at both square and rectangular (e.g. 6x9) grids.
 - [ ] **Milestone 3 — drag-and-drop + snap**: pieces draggable from a tray onto
       a board, snap to place when correct, lock once placed.
 - [ ] **Milestone 4 — daily image rotation**: folder of preloaded images, one
-      picked per day (by date), piece-count selector (16 / 100 / etc.).
+      picked per day (by date), piece-count selector (16 / 100 / etc.),
+      probably with a mobile-aware default piece count.
 - [ ] **Milestone 5 — responsive layout**: board+tray reflow for portrait vs.
       landscape, touch-drag polish.
 - [ ] **Port to Devvit**: once all of the above work smoothly as a plain page.
 
-## Milestone 1 — what's in `index.html`
+## Milestone 2 — what's in `index.html`
 
-A single self-contained HTML file (no build step, no dependencies) that:
+Still a single self-contained HTML file, now with an `images/` folder alongside
+it holding the sample art. What's new since milestone 1:
 
-- Builds an edge-grid for an arbitrary `cols x rows` piece count and randomly
-  assigns each interior edge a tab direction (in/out), seeded so results are
-  reproducible.
-- Traces each piece's 4-sided outline as an SVG path, reusing **one** bezier
-  "tab" curve for every interior edge (mirrored/flipped per edge), and a flat
-  line for border edges — exactly the "one stamp, reused everywhere" approach
-  from the original plan.
-- Exposes sliders for tab size, neck width, and organic jitter, plus a seed
-  and piece-count controls, and an exploded-view toggle — so you can do the
-  "tweak a control point, look, tweak again" loop live in the browser instead
-  of editing code each round.
-
-Open `index.html` directly in a browser (no server needed) to play with it.
+- Every piece gets its own `<clipPath>` (its jigsaw-shaped outline) plus an
+  `<image>` element. Critically, **every piece's `<image>` uses the identical
+  `x`/`y`/`width`/`height` covering the whole board**, with
+  `preserveAspectRatio="xMidYMid slice"` (the SVG equivalent of CSS
+  `background-size: cover`). Only the clip differs per piece — so their
+  visible slices always line up seamlessly, with no per-piece cropping math
+  to get wrong.
+- Works for non-square boards too (e.g. 6 cols x 9 rows): the image
+  center-crops to cover the rectangle rather than stretching.
+- A thumbnail picker switches between the three sample images live.
+- An "outlines" checkbox overlays a faint stroke on the cut lines, useful for
+  spotting alignment issues; off by default so you can judge how seamless it
+  looks assembled.
 
 ## Running locally
 
 Just open `index.html` in a browser — it's a static file with no dependencies.
+The `images/` folder needs to sit alongside it (relative paths).
 
 ## Publishing to GitHub Pages
 
@@ -58,7 +64,6 @@ branch → `main` / `root`**. The site will be live at
 
 ## Next step
 
-Milestone 2: pick one source image, crop it into the piece grid, and clip
-each piece's image slice to its SVG path so the photo reads correctly across
-piece boundaries. Say the word and I'll build that next, using this same
-tab-curve/grid code as the foundation.
+Milestone 3: drag-and-drop. Pieces start scattered in a tray, get dragged onto
+the board, and snap into place (then lock) when dropped near their correct
+position. Say the word and I'll build that next.

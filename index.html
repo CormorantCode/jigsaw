@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Jigsaw Milestone 1 — Tab Curve + Grid</title>
+<title>Jigsaw Milestone 2 — Image Clip Mask</title>
 <style>
   body { font-family: system-ui, sans-serif; background:#1b1c20; color:#eee; margin:0; display:flex; }
   #controls { width: 260px; padding: 16px; box-sizing:border-box; background:#242529; height:100vh; overflow-y:auto; }
@@ -14,10 +14,17 @@
   svg { background:#111; border:1px solid #333; }
   .piece-outline { fill:none; stroke:#5ec3ff; stroke-width:1.5; }
   .piece-outline.exploded { stroke:#ffb15e; }
+  .piece-outline.on-image { stroke:rgba(0,0,0,0.35); stroke-width:1; }
   button { width:100%; margin-top:14px; padding:8px; background:#3a6df0; border:none; color:white; border-radius:6px; cursor:pointer; font-size:13px;}
   button:hover { background:#4a7bff; }
   .row { display:flex; gap:8px; }
   .row > div { flex:1; }
+  .thumbs { display:flex; gap:8px; margin-top:8px; }
+  .thumb { width:56px; height:56px; border-radius:6px; object-fit:cover; cursor:pointer; border:2px solid transparent; opacity:0.7; }
+  .thumb:hover { opacity:1; }
+  .thumb.active { border-color:#5ec3ff; opacity:1; }
+  .check-row { display:flex; align-items:center; gap:8px; margin-top:12px; font-size:12px; color:#bbb; }
+  .check-row input { margin:0; }
 </style>
 </head>
 <body>
@@ -46,12 +53,22 @@
     <input type="range" id="seed" min="1" max="999" value="1">
   </label>
 
+  <label>Puzzle image
+    <div class="thumbs" id="thumbs"></div>
+  </label>
+
+  <div class="check-row">
+    <input type="checkbox" id="showOutline">
+    <label for="showOutline" style="margin:0;">Show piece outlines over image</label>
+  </div>
+
   <button id="regen">Regenerate (new seed)</button>
   <button id="explode">Toggle exploded view</button>
 
   <p style="font-size:11px; color:#888; margin-top:20px; line-height:1.5;">
-    Milestone 1: tab-curve + edge-grid only, plain SVG outlines, no image yet.
-    Confirms neighboring pieces truly mate before we clip an image to these paths.
+    Milestone 2: each piece's SVG path now clips a copy of the source image,
+    all sharing the same position/scale so the picture reads correctly across
+    every cut. Confirms cropping is correct before we layer in drag-and-drop.
   </p>
 </div>
 <div id="stage"></div>
@@ -199,6 +216,13 @@ function piecePath(row, col, cols, rows, pieceW, pieceH, grid, size, neck, diame
   return d;
 }
 
+const IMAGES = [
+  { id: 'july4th', src: 'images/july4th-01.png', label: 'Fireworks' },
+  { id: 'origami', src: 'images/origami-09.png', label: 'Origami ladybug' },
+  { id: 'flowers', src: 'images/flowers-04.png', label: 'Allium flowers' }
+];
+window.__activeImage = IMAGES[0].id;
+
 function render() {
   const cols = +document.getElementById('cols').value;
   const rows = +document.getElementById('rows').value;
@@ -207,6 +231,7 @@ function render() {
   const diameter = +document.getElementById('diameter').value;
   const bow = +document.getElementById('bow').value;
   const seed = +document.getElementById('seed').value;
+  const showOutline = document.getElementById('showOutline').checked;
 
   document.getElementById('colsVal').textContent = cols;
   document.getElementById('rowsVal').textContent = rows;
@@ -237,24 +262,63 @@ function render() {
   const scale = Math.min(maxDim / totalW, maxDim / totalH, 1.4);
   const displayW = totalW * scale, displayH = totalH * scale;
 
+  const activeImg = IMAGES.find(i => i.id === window.__activeImage);
+  const imgHref = activeImg ? activeImg.src : null;
+
   let svg = `<svg viewBox="0 0 ${totalW} ${totalH}" width="${displayW}" height="${displayH}">`;
+  svg += `<defs>`;
   const palette = ['#5ec3ff','#7dd3a0','#ffb15e','#ff8fa3','#c3a6ff','#f4e56a'];
+  const pieces = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const d = piecePath(r, c, cols, rows, pieceW, pieceH, grid, size, neck, diameter, bow);
-      const ox = explode ? c * gap : 0;
-      const oy = explode ? r * gap : 0;
-      const color = palette[(r * cols + c) % palette.length];
-      svg += `<g transform="translate(${ox},${oy})">`;
-      svg += `<path d="${d}" class="piece-outline${explode ? ' exploded' : ''}" stroke="${color}"/>`;
-      svg += `</g>`;
+      pieces.push({ r, c, d });
+      svg += `<clipPath id="clip-${r}-${c}"><path d="${d}"/></clipPath>`;
     }
+  }
+  svg += `</defs>`;
+
+  for (const { r, c, d } of pieces) {
+    const ox = explode ? c * gap : 0;
+    const oy = explode ? r * gap : 0;
+    const color = palette[(r * cols + c) % palette.length];
+    svg += `<g transform="translate(${ox},${oy})">`;
+    if (imgHref) {
+      // Every piece's <image> uses the IDENTICAL x/y/width/height covering the
+      // whole board, with preserveAspectRatio="xMidYMid slice" (like CSS
+      // background-size:cover). Because every piece references the exact same
+      // framing, their visible slices line up seamlessly — only the clipPath
+      // differs per piece. This is what keeps the photo reading correctly
+      // across every cut instead of each piece cropping independently.
+      svg += `<image href="${imgHref}" x="0" y="0" width="${boardW}" height="${boardH}" `
+           + `preserveAspectRatio="xMidYMid slice" clip-path="url(#clip-${r}-${c})"/>`;
+      if (showOutline) {
+        svg += `<path d="${d}" class="piece-outline on-image"/>`;
+      }
+    } else {
+      svg += `<path d="${d}" class="piece-outline${explode ? ' exploded' : ''}" stroke="${color}"/>`;
+    }
+    svg += `</g>`;
   }
   svg += `</svg>`;
   document.getElementById('stage').innerHTML = svg;
 }
 
+function renderThumbs() {
+  const el = document.getElementById('thumbs');
+  el.innerHTML = IMAGES.map(img =>
+    `<img class="thumb${img.id === window.__activeImage ? ' active' : ''}" src="${img.src}" data-id="${img.id}" title="${img.label}">`
+  ).join('');
+  el.querySelectorAll('.thumb').forEach(t => t.addEventListener('click', () => {
+    window.__activeImage = t.dataset.id;
+    renderThumbs();
+    render();
+  }));
+}
+renderThumbs();
+
 document.querySelectorAll('#controls input[type=range]').forEach(el => el.addEventListener('input', render));
+document.getElementById('showOutline').addEventListener('change', render);
 document.getElementById('regen').addEventListener('click', () => {
   document.getElementById('seed').value = Math.floor(Math.random() * 999) + 1;
   render();
